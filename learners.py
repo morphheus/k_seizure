@@ -1,11 +1,15 @@
-"""Neural network methods"""
+"""Different learners used for the project"""
 import lasagne
 import theano
 import theano.tensor as T
 import numpy as np
 import time
 
-from datareader import stratified_folds
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 class NeuralNet():
     """Basic class for a neural nework"""
@@ -24,12 +28,20 @@ class NeuralNet():
         """
         raise NotImplementedError()
 
-    def train(self, x_train, y_train, x_test, y_test, num_epochs, train_batchsize, display=False, **kwargs):
+    def train(self, x_train, y_train, x_test, y_test, num_epochs, train_batchsize, display=False, tally_errs=True, **kwargs):
         """Trains the neural network with the input/target pairs"""
+
+        # Setup the actual function calls
         train_fct = theano.function([self.input_var, self.target_var], self.loss, updates=self.updates)
         test_fct = theano.function([self.input_var, self.target_var], [self.loss_test, self.acc_test])
 
+        # Option to turn off error tallying, in case it takes up too much processing time
+        if tally_errs:
+            epoch_errors = np.empty(shape=(2,num_epochs))
+        else:
+            epoch_errors = None
 
+        # Train the learner over the specified number of epochs
         for epoch in range(num_epochs):
             # In each epoch, we do a full pass over the training data:
             train_err = 0
@@ -45,7 +57,6 @@ class NeuralNet():
             test_err = 0
             test_acc = 0
             test_batches = 0
-
             for batch in iterate_minibatches(x_test, y_test, train_batchsize):
                 inputs, targets = batch
                 err, acc = test_fct(inputs, targets)
@@ -53,26 +64,26 @@ class NeuralNet():
                 test_acc += acc
                 test_batches += len(targets)
 
+            final_epoch_acc = test_acc / test_batches * 100
+            logger.debug("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
+            logger.debug("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+            logger.debug("  test loss:    \t\t{:.6f}".format(test_err/test_batches))
+            logger.debug("  test accuracy:\t\t{:.2f} %".format(final_epoch_acc))
 
-            # Then we print the results for this epoch:
-            if display:
-                print("Epoch {} of {} took {:.3f}s".format(
-                    epoch + 1, num_epochs, time.time() - start_time))
-                print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-                print("  test loss:    \t\t{:.6f}".format(test_err/test_batches))
-                print("  test accuracy:\t\t{:.2f} %".format(
-                    test_acc / test_batches * 100))
+            if tally_errs:
+                epoch_errors[0,epoch] = train_err
+                epoch_errors[1,epoch] = test_err
+
+        return epoch_errors, final_epoch_acc
 
     def build_update_fct(self, learning_rate, update_fct=lasagne.updates.sgd, **kwargs):
         """Defines the update function for the neural net. Uses stochastic grad descent by default"""
         self.updates = update_fct(self.loss, self.params, learning_rate=learning_rate, **kwargs)
 
-
     def prepare_loss(self):
         """Builds attributes required for the initiation of loss functions"""
         self.predict = lasagne.layers.get_output(self.network)
         self.params = lasagne.layers.get_all_params(self.network, trainable=True)
-
 
     def set_loss_binary_crossentropy(self):
         """Sets the loss function as the binary cross-entropy"""
@@ -108,10 +119,11 @@ class L2Convnet(NeuralNet):
 
     def train(self, *args, **kwargs):
         """Training function specific for this network"""
+        logger.debug('Training L2Convnet')
         learning_rate = 0.01
         self.set_loss_binary_crossentropy()
         self.build_update_fct(learning_rate)
-        super().train(*args, **kwargs)
+        return super().train(*args, **kwargs)
 
 
 
@@ -129,29 +141,10 @@ def iterate_minibatches(x,y, batchsize):
 
 
 
-def main():
-    """Testing function"""
-    np.random.seed(12121)
-    feature_count = 3
-    tot_samples = 200
-    data = np.random.rand(tot_samples*feature_count).reshape(-1,feature_count).astype(np.float32)
-    targets = np.random.randint(2, size=(tot_samples,)).astype(np.int32)
-    data *= 0.8
-    data[targets==1, 2] *= 0.2 
-    data[targets==1, 2] += 0.8
-    targets.reshape(-1,1)
-
-    train_batchsize = 1
-    num_epochs = 10
-
-    for x_train, y_train, x_test, y_test in stratified_folds(data, targets, folds=2):
-        neuralnet = L2Convnet(None, feature_count)
-        neuralnet.train(x_train, y_train, x_test, y_test, num_epochs, train_batchsize, display=True)
-        exit()
 
 
 if __name__ == '__main__':
-    main()
+    pass
     
 
 
