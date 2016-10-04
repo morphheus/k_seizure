@@ -6,6 +6,7 @@ from logging import log
 
 import learners
 import datareader
+import plotlib as graphs
 
 
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +17,7 @@ def main():
     """Testing function"""
     np.random.seed(12121)
     feature_count = 3
-    tot_samples = 200
+    tot_samples = 400
     data = np.random.rand(tot_samples*feature_count).reshape(-1,feature_count).astype(np.float32)
     targets = np.random.randint(2, size=(tot_samples,)).astype(np.int32)
     data *= 0.8
@@ -25,19 +26,19 @@ def main():
     targets.reshape(-1,1)
 
     train_batchsize = 1
-    num_epochs = 10
+    num_epochs = 100
 
     learner_list = [(learners.L2Convnet(None, feature_count), (num_epochs, train_batchsize), {'display':False})]
 
 
-    kfold_train(learner_list, data, targets)
+    kfold_train(learner_list, data, targets, 2)
 
 
 
 
 
-def kfold_train(learner_list, data, targets, display=True):
-    """Trains the list of learners in parallel.
+def kfold_train(learner_list, data, targets, folds, show_hair=True, display=True):
+    """Trains the list of learners in parallel. PARALLEL NOT IMPLEMENTED YET
     All learners must be objects having the following function signature:
     <learner>.train(x_train, y_train, x_test, y_test, num_epochs, train_batchsize, display=False)
 
@@ -51,16 +52,17 @@ def kfold_train(learner_list, data, targets, display=True):
         all_errors = []
         accuracies = []
         k = 0
-        for x_train, y_train, x_test, y_test in datareader.stratified_folds(data, targets, folds=2):
+        for x_train, y_train, x_test, y_test in datareader.stratified_folds(data, targets, folds=folds):
             if display:
                 logger.info('Working on <' + type(l[0]).__name__ + '> fold ' + str(k))
-            err_lists, test_acc = l[0].train(x_train, y_train, x_test, y_test, *l[1], **l[2])
-            all_errors.append(err_lists)
+            epochs_errors, test_acc = l[0].train(x_train, y_train, x_test, y_test, *l[1], **l[2])
+            all_errors.append(epochs_errors)
             accuracies.append(test_acc)
             k += 1
 
-        print(len(all_errors))
         logger.debug(accuracies)
+        if show_hair: graphs.hair(all_errors); graphs.show()
+
 
 
 

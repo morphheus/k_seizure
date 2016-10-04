@@ -120,7 +120,7 @@ class L2Convnet(NeuralNet):
     def train(self, *args, **kwargs):
         """Training function specific for this network"""
         logger.debug('Training L2Convnet')
-        learning_rate = 0.01
+        learning_rate = 0.005
         self.set_loss_binary_crossentropy()
         self.build_update_fct(learning_rate)
         return super().train(*args, **kwargs)
