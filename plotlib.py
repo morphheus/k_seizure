@@ -152,7 +152,7 @@ def change_fontsize(fsize):
     matplotlib.rcParams.update({'font.size': fsize})
 
 #----- GRAPHS
-def hair(err_list, y_label='Error', axes=None, savename='', **kwargs):
+def train_and_test(err_list, y_label='Error', legend_labels=('Train', 'Test'), axes=None, savename='', **kwargs):
     """Plots an evolution graph of the test and validation errors"""
     if axes==None:
         ax = plt.axes()
@@ -166,8 +166,8 @@ def hair(err_list, y_label='Error', axes=None, savename='', **kwargs):
         avg += errs
     avg /= len(err_list)
 
-    ax.plot(avg[0,:], color='#660000', linewidth=4, label='Train')
-    ax.plot(avg[1,:], color='#006600', linewidth=4, label='Test')
+    ax.plot(avg[0,:], color='#660000', linewidth=4, label=legend_labels[0])
+    ax.plot(avg[1,:], color='#006600', linewidth=4, label=legend_labels[1])
     ax.legend()
 
     #ymin, ymax = (0, 1)

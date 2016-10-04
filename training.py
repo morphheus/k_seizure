@@ -17,24 +17,20 @@ def main():
     """Testing function"""
     np.random.seed(12121)
     feature_count = 3
-    tot_samples = 400
+    tot_samples = 600
     data = np.random.rand(tot_samples*feature_count).reshape(-1,feature_count).astype(np.float32)
     targets = np.random.randint(2, size=(tot_samples,)).astype(np.int32)
-    data *= 0.8
-    data[targets==1, 2] *= 0.2 
+    data *= 0.2
     data[targets==1, 2] += 0.8
     targets.reshape(-1,1)
 
     train_batchsize = 1
-    num_epochs = 100
+    num_epochs = 20
 
     learner_list = [(learners.L2Convnet(None, feature_count), (num_epochs, train_batchsize), {'display':False})]
 
 
-    kfold_train(learner_list, data, targets, 2)
-
-
-
+    kfold_train(learner_list, data, targets, 5)
 
 
 def kfold_train(learner_list, data, targets, folds, show_hair=True, display=True):
@@ -61,7 +57,7 @@ def kfold_train(learner_list, data, targets, folds, show_hair=True, display=True
             k += 1
 
         logger.debug(accuracies)
-        if show_hair: graphs.hair(all_errors); graphs.show()
+        if show_hair: graphs.train_and_test(all_errors, legend_labels=('Training folds', 'Testing folds')); graphs.show()
 
 
 
