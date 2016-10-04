@@ -1,12 +1,9 @@
 """Module to read and write the .mat data in batches"""
-# translation of the Matlab feature extractor 
-# Credit: https://www.kaggle.com/deepcnn
 import pdb
 import sys
 import os
 import numpy as np
 import pandas as pd
-from math import *
 from scipy.io import loadmat
 from scipy.stats import skew, kurtosis
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
@@ -49,9 +46,9 @@ def stratified_folds(X, Y, folds=7, shuffle_split=False):
     """Returns the indicies for training folds and test sets. Note that the shuffle option corresponds to a ShuffleSplit cross-validator""" 
     sss = StratifiedShuffleSplit(n_splits=folds, test_size=0.2) if shuffle_split else StratifiedKFold(n_splits=folds, shuffle=False)
     for train_index, test_index in sss.split(X,Y):
-        print("TRAIN:", train_index, "TEST:", test_index)
-        X_train, X_test = X[train_index], X[test_index]
-        Y_train, Y_test = Y[train_index], Y[test_index]
+        x_train, x_test = X[train_index], X[test_index]
+        y_train, y_test = Y[train_index], Y[test_index]
+        yield x_train, y_train ,x_test, y_test
 
 
 

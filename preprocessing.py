@@ -1,8 +1,9 @@
 """Module to preprocess the raw eeg data"""
+# translation of the Matlab feature extractor 
+# Credit: https://www.kaggle.com/deepcnn
 import datareader
 import numpy as np
 import pandas as pd
-from math import *
 from scipy.stats import skew, kurtosis
 
 
