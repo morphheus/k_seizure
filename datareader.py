@@ -4,6 +4,7 @@ import sys
 import os
 import numpy as np
 import pandas as pd
+import resource
 from scipy.io import loadmat
 from scipy.stats import skew, kurtosis
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
@@ -50,16 +51,64 @@ def stratified_folds(X, Y, folds=7, shuffle_split=False):
         y_train, y_test = Y[train_index], Y[test_index]
         yield x_train, y_train ,x_test, y_test
 
+def iterate_datafiles_maxmem(pathlist, loadfct, *args, maxmem=20, **kwargs):
+    """Iterates through the datafiles keeping up to a maximum of data loaded in memory at a time
+    This function should ideally be used with larger files. It will be slow with a lot of small files.
+    pathlist: list of direct paths to the concerned files
+    loadfct:  function called to load the concerned files. will call loadfct(path, *args, **kwargs)
+    maxmem:   maximum memory to load, in MiB
+    """
+    maxmem_bytes = maxmem*1024**2
+    
+    # Obtain the size of all the files, as a ratio of the maximum allowed
+    sizes = np.array([os.stat(p).st_size for p in pathlist]).astype(np.float64)
+    if True in sizes>=1:
+        warnings.warn('At least one file is larger than the specified maxmem. These files will be loaded individually,\
+                       but will bust the specified maximal memory')
+
+    # Iteratively load
+    tot_files = len(pathlist)
+    k = 0
+    while k < tot_files:
+        prev_k = k
+        batch_size = sizes[k]
+
+        # Determine how many files we can take such that we won't bust the limit
+        # A single too large file will be loaded alone
+        while batch_size < maxmem_bytes:
+            k += 1
+            if k < tot_files:
+                batch_size += sizes[k]
+            else:
+                break
+
+        # Load data, yield it. Next time datalist is loaded, it will crush existing data, unless it was saved by 
+        # the parent function call
+        datalist = [loadfct(path, *args, **kwargs) for path in pathlist[prev_k:k]]
+        for data in datalist:
+            yield data
+        
+
+
+    
+
+def main():
+    """Testing function"""
+    pathlist, targets = get_train_data_paths(1)
+    pathlist = pathlist[:20]
+    k = 0
+    for thing in iterate_datafiles_maxmem(pathlist, mat_to_data):
+        print(k)
+        k+=1 
+        pass
+
+
 
 
 
 if __name__ == '__main__':
-    pass
-    #paths, targets = get_train_data_paths(1)
-    #[print(str(t) + '  ' + s) for s,t in zip(paths, targets)]
-    X = np.arange(20)
-    Y = np.append(np.ones(5), np.zeros(15))
-    stratified_folds(X,Y,folds=4, shuffle_split=False)
+    main()
+
 
 
 
