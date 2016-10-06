@@ -5,6 +5,7 @@ import os
 import numpy as np
 import pandas as pd
 import resource
+import warnings
 from scipy.io import loadmat
 from scipy.stats import skew, kurtosis
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
@@ -51,7 +52,7 @@ def stratified_folds(X, Y, folds=7, shuffle_split=False):
         y_train, y_test = Y[train_index], Y[test_index]
         yield x_train, y_train ,x_test, y_test
 
-def iterate_datafiles_maxmem(pathlist, loadfct, *args, maxmem=20, **kwargs):
+def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
     """Iterates through the datafiles keeping up to a maximum of data loaded in memory at a time
     This function should ideally be used with larger files. It will be slow with a lot of small files.
     pathlist: list of direct paths to the concerned files
@@ -59,21 +60,33 @@ def iterate_datafiles_maxmem(pathlist, loadfct, *args, maxmem=20, **kwargs):
     maxmem:   maximum memory to load, in MiB
     """
     maxmem_bytes = maxmem*1024**2
-    
     # Obtain the size of all the files, as a ratio of the maximum allowed
-    sizes = np.array([os.stat(p).st_size for p in pathlist]).astype(np.float64)
-    if True in sizes>=1:
-        warnings.warn('At least one file is larger than the specified maxmem. These files will be loaded individually,\
-                       but will bust the specified maximal memory')
+
+    if type(rawpathlist[0]) == type(list()):
+        pathlist = rawpathlist
+        tmp = len(pathlist[0])
+        for nest in pathlist:
+            if len(nest) != tmp:
+                raise Exception('The nested lists in pathlist have different lengths')
+    else: # If not nested, nest it!
+        pathlist = [rawpathlist]
+
+    # Calculate the sizes
+    tot_files = len(pathlist[0])
+    sizes = np.zeros(tot_files).astype(np.float64)
+    for k, sublist in enumerate(pathlist):
+        sizes += np.array([os.stat(p).st_size for p in sublist]).astype(np.float64)
+    sizes /= maxmem_bytes
+
+    if True in (sizes>=1):
+        warnings.warn('At least one file or set of files is larger than the specified maxmem')
 
     # Iteratively load
-    tot_files = len(pathlist)
     k = 0
     while k < tot_files:
         prev_k = k
         batch_size = sizes[k]
-
-        # Determine how many files we can take such that we won't bust the limit
+        # Determine how sets of files we can take such that we won't bust the limit
         # A single too large file will be loaded alone
         while batch_size < maxmem_bytes:
             k += 1
@@ -81,23 +94,31 @@ def iterate_datafiles_maxmem(pathlist, loadfct, *args, maxmem=20, **kwargs):
                 batch_size += sizes[k]
             else:
                 break
-
-        # Load data, yield it. Next time datalist is loaded, it will crush existing data, unless it was saved by 
-        # the parent function call
-        datalist = [loadfct(path, *args, **kwargs) for path in pathlist[prev_k:k]]
+        # Load data, yield it. Next time datalist is loaded, it will crush existing data, unless 
+        # it was saved by the parent function call
+        datalist = [[loadfct(path, *args, **kwargs) for path in sublist] for sublist in pathlist[prev_k:k]]
         for data in datalist:
             yield data
-        
 
 
-    
+
 
 def main():
     """Testing function"""
     pathlist, targets = get_train_data_paths(1)
+
+    count = 4
+    nested_pathlist = []
+    for k in range(3):
+        nested_pathlist.append(pathlist[k*count:(k+1)*count])
+
+
     pathlist = pathlist[:20]
+
+
     k = 0
-    for thing in iterate_datafiles_maxmem(pathlist, mat_to_data):
+    for thing in iterate_datafiles_maxmem(nested_pathlist, mat_to_data):
+        [print(x['data'].shape) for x in thing]
         print(k)
         k+=1 
         pass
