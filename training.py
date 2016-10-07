@@ -9,28 +9,7 @@ import datareader
 import plotlib as graphs
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-def main():
-    """Testing function"""
-    np.random.seed(12121)
-    feature_count = 3
-    tot_samples = 600
-    data = np.random.rand(tot_samples*feature_count).reshape(-1,feature_count).astype(np.float32)
-    targets = np.random.randint(2, size=(tot_samples,)).astype(np.int32)
-    data *= 0.2
-    data[targets==1, 2] += 0.8
-    targets.reshape(-1,1)
-
-    train_batchsize = 1
-    num_epochs = 20
-
-    learner_list = [(learners.L2Convnet(None, feature_count), (num_epochs, train_batchsize), {'display':False})]
-
-
-    kfold_train(learner_list, data, targets, 5)
 
 
 def kfold_train(learner_list, data, targets, folds, show_hair=True, display=True):
@@ -61,6 +40,24 @@ def kfold_train(learner_list, data, targets, folds, show_hair=True, display=True
 
 
 
+def main():
+    """Testing function"""
+    np.random.seed(12121)
+    feature_count = 3
+    tot_samples = 600
+    data = np.random.rand(tot_samples*feature_count).reshape(-1,feature_count).astype(np.float32)
+    targets = np.random.randint(2, size=(tot_samples,)).astype(np.int32)
+    data *= 0.2
+    data[targets==1, 2] += 0.8
+    targets.reshape(-1,1)
+
+    train_batchsize = 1
+    num_epochs = 20
+
+    learner_list = [(learners.L2Convnet(None, feature_count), (num_epochs, train_batchsize), {'display':False})]
+
+
+    kfold_train(learner_list, data, targets, 5)
 
 
 

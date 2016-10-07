@@ -5,6 +5,8 @@ import theano.tensor as T
 import numpy as np
 import time
 
+import datareader
+
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +50,8 @@ class NeuralNet():
             train_batches = 0
             start_time = time.time()
             for batch in iterate_minibatches(x_train, y_train, train_batchsize):
-                inputs, targets = batch
+                raw_inputs, raw_targets = batch
+
                 err = train_fct(inputs, targets)
                 train_err += err
                 train_batches += 1
@@ -127,9 +130,10 @@ class L2Convnet(NeuralNet):
 
 
 
-
-def iterate_minibatches(x,y, batchsize):
-    """Iterates sequentially over the first axis of x and y numpy arrays in the specified batchsize"""
+def iterate_minibatches(pathlist, targes, batchsize):
+    """Iterates sequentially over the items and outputs appropriate batches
+    pathlist: list of files to load and use
+    targets:  numpy array of with zeroth axis hving the same size as pathlist"""
     k = 0
     if batchsize <= 0:
         raise ValueError('Batchsize cannot be zero or negative')
@@ -138,7 +142,6 @@ def iterate_minibatches(x,y, batchsize):
         tmp = slice(k, k+batchsize)
         yield x[tmp, ...], y[tmp, ...]
         k += batchsize
-
 
 
 

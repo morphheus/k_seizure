@@ -15,8 +15,12 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 # computation but not installed here
 
 # Globals
+ROOT_DATA_DIR = 'data/'
 TRAIN_DIR_PATH = 'training_data/'
 TRAIN_PATIENT_PATH_PREFIX = 'train_'
+
+TEST_DIR_PATH = 'testing_data/'
+TEST_PATIENT_PATH_PREFIX = 'test_'
 PATIENTS = [1]
 
 def mat_to_data(path):
@@ -26,22 +30,40 @@ def mat_to_data(path):
     ndata = {n: mat['dataStruct'][n][0, 0] for n in names}
     return ndata
 
-def get_train_patient_list():
+def get_dirpath(train, preproc):
+    """Builds the directorypath, which depends if the user wants to access the train/test, raw/preproc data"""
+    dirpath = ROOT_DATA_DIR
+    dirpath += TRAIN_DIR_PATH[:-1] if train else TEST_DIR_PATH[:-1]
+    dirpath += '_preproc' if preproc else ''
+    dirpath += '/'
+    return dirpath
+
+def get_preproc_path(rawpath, train):
+    """From the raw filepath, returns the filepath corresponding to the preproc folder"""
+    dirpath = get_dirpath(train, True)
+    return dirpath + '/'.join(rawpath.split('/')[-2:])
+
+
+def get_patient_list(train=True, preproc=True):
     """Returns the number of patients and their folder prefixes"""
-    directories = os.listdir(TRAIN_DIR_PATH)
+    dirpath = get_dirpath(train, preproc)
+
+    directories = os.listdir(dirpath)
     patients = [int(s[s.index('_')+1:]) for s in directories]
-    patients_paths = [TRAIN_DIR_PATH + x + '/' for x in directories]
+    patients_paths = [dirpath + x + '/' for x in directories]
     return patients, patients_paths
 
-def get_train_data_paths(patient):
+def get_data_paths(patient, train=True, preproc=True):
     """Returns a list of files for that patient"""
-    paths = os.listdir(TRAIN_DIR_PATH + TRAIN_PATIENT_PATH_PREFIX + str(patient))
+    dirpath = get_dirpath(train, preproc)
+
+    paths = os.listdir(dirpath + TRAIN_PATIENT_PATH_PREFIX + str(patient))
     tmp = [(int(s.split('_')[1]), s) for s in paths]
     tmp.sort()
     sorted_paths = list(zip(*tmp))[1]
     targets = [int(s[-1*s[::-1].index('_'):-4]) for s in sorted_paths]
     # Add the path prefix
-    out = [TRAIN_DIR_PATH + TRAIN_PATIENT_PATH_PREFIX + str(patient) + '/' + s for s in sorted_paths]
+    out = [dirpath + TRAIN_PATIENT_PATH_PREFIX + str(patient) + '/' + s for s in sorted_paths]
     return out, targets
 
 def stratified_folds(X, Y, folds=7, shuffle_split=False):
@@ -62,6 +84,7 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
     maxmem_bytes = maxmem*1024**2
     # Obtain the size of all the files, as a ratio of the maximum allowed
 
+    nested = True
     if type(rawpathlist[0]) == type(list()):
         pathlist = rawpathlist
         tmp = len(pathlist[0])
@@ -69,6 +92,7 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
             if len(nest) != tmp:
                 raise Exception('The nested lists in pathlist have different lengths')
     else: # If not nested, nest it!
+        nested = False
         pathlist = [rawpathlist]
 
     # Calculate the sizes
@@ -88,7 +112,7 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
         batch_size = sizes[k]
         # Determine how sets of files we can take such that we won't bust the limit
         # A single too large file will be loaded alone
-        while batch_size < maxmem_bytes:
+        while batch_size < 1:
             k += 1
             if k < tot_files:
                 batch_size += sizes[k]
@@ -96,18 +120,25 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
                 break
         # Load data, yield it. Next time datalist is loaded, it will crush existing data, unless 
         # it was saved by the parent function call
-        datalist = [[loadfct(path, *args, **kwargs) for path in sublist] for sublist in pathlist[prev_k:k]]
-        for data in datalist:
-            yield data
+        datalist = [[loadfct(path, *args, **kwargs) for path in sublist[prev_k:k]] for sublist in pathlist]
+        if nested:
+            for data in datalist:
+                yield data
+        else:
+            for data in datalist[0]:
+                yield data
+
+
+
 
 
 
 
 def main():
     """Testing function"""
-    pathlist, targets = get_train_data_paths(1)
+    pathlist, targets = get_train_data_paths(1, train=True, preproc=False)
 
-    count = 4
+    count = 10
     nested_pathlist = []
     for k in range(3):
         nested_pathlist.append(pathlist[k*count:(k+1)*count])
@@ -117,7 +148,7 @@ def main():
 
 
     k = 0
-    for thing in iterate_datafiles_maxmem(nested_pathlist, mat_to_data):
+    for thing in iterate_datafiles_maxmem(pathlist, mat_to_data):
         [print(x['data'].shape) for x in thing]
         print(k)
         k+=1 

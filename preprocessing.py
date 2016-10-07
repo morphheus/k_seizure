@@ -1,10 +1,20 @@
-"""Module to preprocess the raw eeg data"""
+"""Module to preprocess the raw eeg data. Roughly speaking, it does the non-machine learning 
+feature engineering"""
 # translation of the Matlab feature extractor 
 # Credit: https://www.kaggle.com/deepcnn
-import datareader
 import numpy as np
 import pandas as pd
+import math
+import logging
 from scipy.stats import skew, kurtosis
+from logging import log
+
+import datareader
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 
 def corr(data,type_corr):
@@ -16,24 +26,42 @@ def corr(data,type_corr):
     x = np.real(x)
     return x
 
+def preprocess_patients(patientlist, train=True):
+    """Preprocesses all files from the listed patients"""
+    pathlist = []
+    for patient in patientlist:
+        if type(patient) != type(int()):
+            raise Exception('Expected an integer for patient number')
 
-def preprocess_files(flist):
-    """Preprocesses a list of datafiles and outputs the data and target vectors, if necessary"""
+        tmp, targets = datareader.get_data_paths(patient, train=train, preproc=False)
+        pathlist += tmp
+
+    logger.log(logging.INFO, 'Preprocessing files...')
+    k = 0
+    data_iterator = datareader.iterate_datafiles_maxmem(pathlist[:10], datareader.mat_to_data, maxmem=200)
+    for data_dict, path in zip(data_iterator, pathlist[:10]):
+        k += 1
+        logger.log(logging.INFO, 'Preprocessing file ' + str(k) + ' of ' + str(len(pathlist)))
+        print(data_dict['data'].shape)
+        feat = calculate_features(data_dict)
+        print(feat.shape)
+        newpath = datareader.get_preproc_path(path, train)[:-4] # get preproc path, without .mat
+        np.save(newpath, feat)
 
 
-def calculate_features(file_name):
-    f = datareader.mat_to_data(file_name)
+
+
+def calculate_features(data_dict):
+    f = data_dict
     fs = f['iEEGsamplingRate'][0,0]
     eegData = f['data']
     [nt, nc] = eegData.shape
-    print((nt, nc))
-    subsampLen = floor(fs * 60)
-    numSamps = int(floor(nt / subsampLen));      # Num of 1-min samples
+    subsampLen = math.floor(fs * 60)
+    numSamps = int(math.floor(nt / subsampLen));      # Num of 1-min samples
     sampIdx = range(0,(numSamps+1)*subsampLen,subsampLen)
     #print(sampIdx)
     feat = [] # Feature Vector
     for i in range(1, numSamps+1):
-        print('processing file {} epoch {}'.format(file_name,i))
         epoch = eegData[sampIdx[i-1]:sampIdx[i], :]
 
         # compute Shannon's entropy, spectral edge and correlation matrix
@@ -73,15 +101,15 @@ def calculate_features(file_name):
         
         # Spectral entropy for dyadic bands
         # Find number of dyadic levels
-        ldat = int(floor(nt/2.0))
-        no_levels = int(floor(log(ldat,2.0)))
-        seg = floor(ldat/pow(2.0, no_levels-1))
+        ldat = int(math.floor(nt/2.0))
+        no_levels = int(math.floor(math.log(ldat,2.0)))
+        seg = math.floor(ldat/pow(2.0, no_levels-1))
 
         # Find the power spectrum at each dyadic level
         dspect = np.zeros((no_levels,nc))
         for j in range(no_levels-1,-1,-1):
-            dspect[j,:] = 2*np.sum(D[int(floor(ldat/2.0))+1:ldat,:], axis=0)
-            ldat = int(floor(ldat/2.0))
+            dspect[j,:] = 2*np.sum(D[int(math.floor(ldat/2.0))+1:ldat,:], axis=0)
+            ldat = int(math.floor(ldat/2.0))
 
         # Find the Shannon's entropy
         spentropyDyd = -1*np.sum(np.multiply(dspect,np.log(dspect)), axis=0)
@@ -119,7 +147,6 @@ def calculate_features(file_name):
         # compile all the features
         feat = np.concatenate((feat,
                                spentropy.ravel(),
-          
 
                      spedge.ravel(),
                                lxchannels.ravel(),
@@ -134,12 +161,15 @@ def calculate_features(file_name):
                                kurt.ravel()
                                 ))
 
-    return feat
+    return feat.astype(np.float32)
+
+def main():
+    """Test function"""
+    preprocess_patients([1])
+
 
 if __name__ == '__main__':
-    feat = calculate_features('input/train_1/1_1_1.mat')
-    print(feat)
-    print(feat.shape)
+    main()
 
 
 
