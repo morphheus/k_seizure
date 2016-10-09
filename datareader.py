@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 import resource
 import warnings
+import time
+import gc
 from scipy.io import loadmat
-from scipy.stats import skew, kurtosis
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
+from theano import shared
 
 #import pyeeg 
 # pyeeg is the one that has very good fractal dimensions 
@@ -23,6 +24,8 @@ TEST_DIR_PATH = 'testing_data/'
 TEST_PATIENT_PATH_PREFIX = 'test_'
 PATIENTS = [1]
 
+LAST_MSG_LEN = 0
+
 def mat_to_data(path):
     """From matlab format to usable format"""
     mat = loadmat(path)
@@ -30,19 +33,20 @@ def mat_to_data(path):
     ndata = {n: mat['dataStruct'][n][0, 0] for n in names}
     return ndata
 
+
 def get_dirpath(train, preproc):
     """Builds the directorypath, which depends if the user wants to access the train/test, raw/preproc data"""
     dirpath = ROOT_DATA_DIR
     dirpath += TRAIN_DIR_PATH[:-1] if train else TEST_DIR_PATH[:-1]
-    dirpath += '_preproc' if preproc else ''
+    dirpath += '_base' if preproc else ''
+    preproc_assoc = {'base':'_base', 'stft':'_stft'}
     dirpath += '/'
     return dirpath
 
-def get_preproc_path(rawpath, train):
+def get_preproc_path(rawpath, train, preproc):
     """From the raw filepath, returns the filepath corresponding to the preproc folder"""
-    dirpath = get_dirpath(train, True)
+    dirpath = get_dirpath(train, preproc)
     return dirpath + '/'.join(rawpath.split('/')[-2:])
-
 
 def get_patient_list(train=True, preproc=True):
     """Returns the number of patients and their folder prefixes"""
@@ -66,13 +70,6 @@ def get_data_paths(patient, train=True, preproc=True):
     out = [dirpath + TRAIN_PATIENT_PATH_PREFIX + str(patient) + '/' + s for s in sorted_paths]
     return out, targets
 
-def stratified_folds(X, Y, folds=7, shuffle_split=False):
-    """Returns the indicies for training folds and test sets. Note that the shuffle option corresponds to a ShuffleSplit cross-validator""" 
-    sss = StratifiedShuffleSplit(n_splits=folds, test_size=0.2) if shuffle_split else StratifiedKFold(n_splits=folds, shuffle=False)
-    for train_index, test_index in sss.split(X,Y):
-        x_train, x_test = X[train_index], X[test_index]
-        y_train, y_test = Y[train_index], Y[test_index]
-        yield x_train, y_train ,x_test, y_test
 
 def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
     """Iterates through the datafiles keeping up to a maximum of data loaded in memory at a time
@@ -107,6 +104,7 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
 
     # Iteratively load
     k = 0
+    datalist = []
     while k < tot_files:
         prev_k = k
         batch_size = sizes[k]
@@ -120,14 +118,48 @@ def iterate_datafiles_maxmem(rawpathlist, loadfct, *args, maxmem=20, **kwargs):
                 break
         # Load data, yield it. Next time datalist is loaded, it will crush existing data, unless 
         # it was saved by the parent function call
+        del datalist
+        gc.collect()
         datalist = [[loadfct(path, *args, **kwargs) for path in sublist[prev_k:k]] for sublist in pathlist]
         if nested:
             for data in datalist:
                 yield data
         else:
-            for data in datalist[0]:
+            for k, data in enumerate(datalist[0]):
                 yield data
 
+def iterate_minibatches_datafiles(pathlist, targets, batchsize, display=True):
+    """Iterates sequentially over the items and outputs appropriate batches
+    pathlist: list of files to load and use
+    targets:  numpy array of with zeroth axis having the same size as pathlist"""
+    oprint = lambda x: print(x, end='\r')
+    if batchsize <= 0:
+        raise ValueError('Batchsize cannot be zero or negative')
+    if len(pathlist) != len(targets):
+        raise Exception('Inputs and targets do not have the same length')
+
+    arr_targets = np.array(targets).astype(np.int32)
+    if batchsize != 1:
+        raise NotImplementedError('not implemented for non-unitary batchsize')
+    newpathlist = pathlist
+    data_iterator = iterate_datafiles_maxmem(newpathlist, theano_load, maxmem=1900)
+
+    k = 0
+    while (k+batchsize) <= arr_targets.shape[0]:
+        # Input
+        x = next(data_iterator)
+
+        # Targets
+        tmp = slice(k, k+batchsize)
+        y = arr_targets[tmp]
+        yield x, y
+        k += batchsize
+
+
+def theano_load(path):
+    """Loads a numpy array in theano"""
+    x = np.load(path).reshape(1, 1, -1 )
+    return x
 
 
 

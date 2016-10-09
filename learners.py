@@ -2,6 +2,7 @@
 import lasagne
 import theano
 import theano.tensor as T
+import sys
 import numpy as np
 import time
 
@@ -49,9 +50,20 @@ class NeuralNet():
             train_err = 0
             train_batches = 0
             start_time = time.time()
-            for batch in iterate_minibatches(x_train, y_train, train_batchsize):
-                raw_inputs, raw_targets = batch
 
+            k = 0
+            tot_files = len(x_train)
+            t0 = time.clock() 
+            msg = ''
+            for batch in datareader.iterate_minibatches_datafiles(x_train, y_train, train_batchsize):
+                k += 1
+                print(' '*len(msg), end='\r')
+                msg = 'Epoch ' + str(epoch+1)+'/'+str(num_epochs) + ': file ' 
+                msg += str(k*train_batchsize)+'/'+str(tot_files)+ ' ' +"%2.2f"%(k*train_batchsize/tot_files*100)+'%'
+                msg += ' -- prev elapsed: '+ "%2.2f"%(time.clock()-t0) + ' sec'
+                t0 = time.clock()
+                print(msg, end='\r')
+                inputs, targets = batch
                 err = train_fct(inputs, targets)
                 train_err += err
                 train_batches += 1
@@ -60,7 +72,7 @@ class NeuralNet():
             test_err = 0
             test_acc = 0
             test_batches = 0
-            for batch in iterate_minibatches(x_test, y_test, train_batchsize):
+            for batch in datareader.iterate_minibatches_datafiles(x_test, y_test, train_batchsize):
                 inputs, targets = batch
                 err, acc = test_fct(inputs, targets)
                 test_err += err
@@ -107,18 +119,27 @@ class L2Convnet(NeuralNet):
         batchsize:     Size of training batches. Select None for variable batchsize
         input_size:    Length of input vector for 1 sample
         """
-        self.input_var = T.matrix('inputs')
+        self.input_var = T.tensor3('inputs')
         self.target_var = T.ivector('targets')
         self.batchsize = batchsize
 
+        feats = 3361150
         # Build the chain of layers
-        llist = []
-        llist.append(lasagne.layers.InputLayer(shape=(batchsize, input_size), input_var=self.input_var))
-        llist.append(lasagne.layers.DenseLayer(llist[-1], 13))
-        llist.append(lasagne.layers.DenseLayer(llist[-1], 1))
+        prev_l = lasagne.layers.InputLayer(shape=(batchsize, 1, input_size), input_var=self.input_var)
+        prev_l = lasagne.layers.Conv1DLayer(prev_l, 4,15)
+        prev_l = lasagne.layers.Pool1DLayer(prev_l, 5, mode='max')
+        prev_l = lasagne.layers.Conv1DLayer(prev_l, 5,5)
+        prev_l = lasagne.layers.Pool1DLayer(prev_l, 3, mode='max')
+        prev_l = lasagne.layers.Conv1DLayer(prev_l, 5,4)
+        prev_l = lasagne.layers.Pool1DLayer(prev_l, 3, mode='max')
+        #prev_l = lasagne.layers.Conv1DLayer(prev_l, 5,4)
+        #prev_l = lasagne.layers.Pool1DLayer(prev_l, 3, mode='max')
+        
+        prev_l = lasagne.layers.DenseLayer(prev_l, 1)
+        #print(lasagne.layers.get_output_shape(prev_l)); exit()
 
-        self.network = llist[-1]
-        self.layer_count = len(llist)
+
+        self.network = prev_l
 
     def train(self, *args, **kwargs):
         """Training function specific for this network"""
@@ -130,10 +151,10 @@ class L2Convnet(NeuralNet):
 
 
 
-def iterate_minibatches(pathlist, targes, batchsize):
-    """Iterates sequentially over the items and outputs appropriate batches
-    pathlist: list of files to load and use
-    targets:  numpy array of with zeroth axis hving the same size as pathlist"""
+
+
+def iterate_minibatches(x, y, batchsize):
+    """Iterates sequentially over the items and outputs appropriate batches"""
     k = 0
     if batchsize <= 0:
         raise ValueError('Batchsize cannot be zero or negative')

@@ -1,7 +1,5 @@
 """Module to preprocess the raw eeg data. Roughly speaking, it does the non-machine learning 
 feature engineering"""
-# translation of the Matlab feature extractor 
-# Credit: https://www.kaggle.com/deepcnn
 import numpy as np
 import pandas as pd
 import math
@@ -26,7 +24,7 @@ def corr(data,type_corr):
     x = np.real(x)
     return x
 
-def preprocess_patients(patientlist, train=True):
+def preprocess_patients(patientlist, train=True, preproc='base'):
     """Preprocesses all files from the listed patients"""
     pathlist = []
     for patient in patientlist:
@@ -36,22 +34,21 @@ def preprocess_patients(patientlist, train=True):
         tmp, targets = datareader.get_data_paths(patient, train=train, preproc=False)
         pathlist += tmp
 
+    pathlist = pathlist[80:]
     logger.log(logging.INFO, 'Preprocessing files...')
     k = 0
-    data_iterator = datareader.iterate_datafiles_maxmem(pathlist[:10], datareader.mat_to_data, maxmem=200)
-    for data_dict, path in zip(data_iterator, pathlist[:10]):
+    data_iterator = datareader.iterate_datafiles_maxmem(pathlist, datareader.mat_to_data, maxmem=80)
+    for data_dict, path in zip(data_iterator, pathlist):
         k += 1
         logger.log(logging.INFO, 'Preprocessing file ' + str(k) + ' of ' + str(len(pathlist)))
-        print(data_dict['data'].shape)
         feat = calculate_features(data_dict)
-        print(feat.shape)
-        newpath = datareader.get_preproc_path(path, train)[:-4] # get preproc path, without .mat
+        newpath = datareader.get_preproc_path(path, train, preproc)[:-4] # get preproc path, without .mat
         np.save(newpath, feat)
 
 
-
-
 def calculate_features(data_dict):
+    # translation of the Matlab feature extractor 
+    # Credit: https://www.kaggle.com/deepcnn
     f = data_dict
     fs = f['iEEGsamplingRate'][0,0]
     eegData = f['data']
@@ -165,7 +162,7 @@ def calculate_features(data_dict):
 
 def main():
     """Test function"""
-    preprocess_patients([1])
+    preprocess_patients([1], preproc='stft')
 
 
 if __name__ == '__main__':
