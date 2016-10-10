@@ -1,6 +1,7 @@
 """Module to preprocess the raw eeg data. Roughly speaking, it does the non-machine learning 
 feature engineering"""
 import numpy as np
+import scipy
 import pandas as pd
 import math
 import logging
@@ -41,10 +42,14 @@ def preprocess_patients(patientlist, train=True, preproc='base'):
     for data_dict, path in zip(data_iterator, pathlist):
         k += 1
         logger.log(logging.INFO, 'Preprocessing file ' + str(k) + ' of ' + str(len(pathlist)))
-        feat = calculate_features(data_dict)
+        feat = preproc_fct(preproc)(data_dict)
         newpath = datareader.get_preproc_path(path, train, preproc)[:-4] # get preproc path, without .mat
         np.save(newpath, feat)
 
+def preproc_fct(preproc):
+    """returns the appropriate preprocessing fct"""
+    if preproc=='base': return calculate_features
+    if preproc=='stft': return calculate_stft
 
 def calculate_features(data_dict):
     # translation of the Matlab feature extractor 
@@ -159,6 +164,73 @@ def calculate_features(data_dict):
                                 ))
 
     return feat.astype(np.float32)
+
+
+
+def stft(x, M, hop_ratio, fft_fct=scipy.fft):
+    """Stft calculation. 
+    x :         input signal
+    M :         windowing length
+    hop_ratio : window spacing. 1 means no overlap, 0.5 means all windows overlap halfway, etc."""
+    if not (0<hop_ratio<=1):
+        raise ValueError('The hop must be in the set (0,1]')
+    w = np.hanning(M)
+    hop = int(len(w)*hop_ratio)
+    return np.array([fft_fct(w*x[i:i+M]) for i in range(0, len(x)-M, hop)])
+
+
+def calculate_stft(data_dict, disp=True, polar=False):
+    """Processes the raw data into a stft"""
+    vals = data_dict['data']
+    decim_factor = 1
+    fs = data_dict['iEEGsamplingRate'][0,0]/decim_factor
+    M = 512
+    max_freq = 40 # in Hz
+
+    # lowpass and decimate the data
+    #vals = scipy.signal.decimate(vals, decim_factor, axis=0, zero_phase=True).astype(np.float32)
+
+    # Apply stft
+    max_freq_sample = int(round(M/fs*max_freq))
+    newvals = np.array([stft(x, M, 0.85)[:,:max_freq_sample] for x in vals.T]).astype(np.complex64)
+    print(newvals.shape)
+
+    #Dsiplay some stuff
+    if disp:
+        print(vals.nbytes/1024**2)
+        print(newvals.nbytes/1024**2)
+        time_res = vals.shape[0]/fs/newvals.shape[1]
+        freq_res = fs/M
+        print("%2.3f"%time_res + ' seconds per sample')
+        print("%2.3f"%freq_res + ' Hz per sample. Max frequency: ' + "%2.3f"%(newvals.shape[2]*freq_res))
+
+    # Save in polar coordinates if needed
+    if polar:
+        mag = np.absolute(newvals)
+        angle = np.angle(newvals)
+        out = mix_cat(mag, angle)
+    # else, save as floats instead of complex by catting real and imaginary parts
+    else:
+        out = mix_cat(newvals.real, newvals.imag)
+
+    print(out.shape)
+    exit()
+    return out
+
+
+def mix_cat(x,y):
+    """Concatenates two arrays of same dimension by mixing it along the last axis.
+    output: x[...,0], y[...,0], x[...,1], etc."""
+    if x.shape != y.shape:
+        raise Exception('Both arrays must have the same shape')
+
+    out = np.empty( list(x.shape[:-1]) + [x.shape[-1]*2], dtype=x.dtype)
+    out[..., 0::2] = x
+    out[..., 1::2] = y
+    return out
+
+
+
 
 def main():
     """Test function"""
