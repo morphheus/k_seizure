@@ -38,8 +38,12 @@ def get_dirpath(train, preproc):
     """Builds the directorypath, which depends if the user wants to access the train/test, raw/preproc data"""
     dirpath = ROOT_DATA_DIR
     dirpath += TRAIN_DIR_PATH[:-1] if train else TEST_DIR_PATH[:-1]
-    dirpath += '_base' if preproc else ''
-    preproc_assoc = {'base':'_base', 'stft':'_stft'}
+    preproc_assoc = {'base':'_base', 
+            'stft':'_stft',
+            'stft_polar':'_stft_polar'
+            }
+    if type(preproc) == type(''):
+        dirpath += preproc_assoc[preproc]
     dirpath += '/'
     return dirpath
 

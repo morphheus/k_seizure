@@ -35,23 +35,25 @@ def preprocess_patients(patientlist, train=True, preproc='base'):
         tmp, targets = datareader.get_data_paths(patient, train=train, preproc=False)
         pathlist += tmp
 
-    pathlist = pathlist[80:]
     logger.log(logging.INFO, 'Preprocessing files...')
     k = 0
-    data_iterator = datareader.iterate_datafiles_maxmem(pathlist, datareader.mat_to_data, maxmem=80)
+    data_iterator = datareader.iterate_datafiles_maxmem(pathlist, datareader.mat_to_data, maxmem=200)
     for data_dict, path in zip(data_iterator, pathlist):
         k += 1
         logger.log(logging.INFO, 'Preprocessing file ' + str(k) + ' of ' + str(len(pathlist)))
-        feat = preproc_fct(preproc)(data_dict)
+        preproc_fct, kwargs = get_preproc(preproc)
+        feat = preproc_fct(data_dict, **kwargs)
         newpath = datareader.get_preproc_path(path, train, preproc)[:-4] # get preproc path, without .mat
+        print(newpath)
         np.save(newpath, feat)
 
-def preproc_fct(preproc):
+def get_preproc(preproc):
     """returns the appropriate preprocessing fct"""
-    if preproc=='base': return calculate_features
-    if preproc=='stft': return calculate_stft
+    if preproc=='base': return calculate_features, {}
+    if preproc=='stft': return calculate_stft, {'max_freq':40}
+    if preproc=='stft_polar': return calculate_stft, {'max_freq':40, 'polar':True}
 
-def calculate_features(data_dict):
+def calculate_features(data_dict, **kwargs):
     # translation of the Matlab feature extractor 
     # Credit: https://www.kaggle.com/deepcnn
     f = data_dict
@@ -165,8 +167,6 @@ def calculate_features(data_dict):
 
     return feat.astype(np.float32)
 
-
-
 def stft(x, M, hop_ratio, fft_fct=scipy.fft):
     """Stft calculation. 
     x :         input signal
@@ -178,14 +178,12 @@ def stft(x, M, hop_ratio, fft_fct=scipy.fft):
     hop = int(len(w)*hop_ratio)
     return np.array([fft_fct(w*x[i:i+M]) for i in range(0, len(x)-M, hop)])
 
-
-def calculate_stft(data_dict, disp=True, polar=False):
+def calculate_stft(data_dict, disp=False, polar=False, max_freq=40, **kwargs):
     """Processes the raw data into a stft"""
     vals = data_dict['data']
     decim_factor = 1
     fs = data_dict['iEEGsamplingRate'][0,0]/decim_factor
     M = 512
-    max_freq = 40 # in Hz
 
     # lowpass and decimate the data
     #vals = scipy.signal.decimate(vals, decim_factor, axis=0, zero_phase=True).astype(np.float32)
@@ -193,7 +191,6 @@ def calculate_stft(data_dict, disp=True, polar=False):
     # Apply stft
     max_freq_sample = int(round(M/fs*max_freq))
     newvals = np.array([stft(x, M, 0.85)[:,:max_freq_sample] for x in vals.T]).astype(np.complex64)
-    print(newvals.shape)
 
     #Dsiplay some stuff
     if disp:
@@ -213,8 +210,6 @@ def calculate_stft(data_dict, disp=True, polar=False):
     else:
         out = mix_cat(newvals.real, newvals.imag)
 
-    print(out.shape)
-    exit()
     return out
 
 
@@ -235,6 +230,7 @@ def mix_cat(x,y):
 def main():
     """Test function"""
     preprocess_patients([1], preproc='stft')
+    preprocess_patients([1], preproc='stft_polar')
 
 
 if __name__ == '__main__':

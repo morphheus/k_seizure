@@ -73,7 +73,7 @@ def main():
     num_epochs = 10
 
 
-    datapaths, targets = datareader.get_data_paths(1, train=True, preproc='base')
+    datapaths, targets = datareader.get_data_paths(1, train=True, preproc='stft')
     #x = datareader.mat_to_data(datapaths[0])
     #print(x['data'].nbytes); 
     #print(x['data'].shape); exit()
